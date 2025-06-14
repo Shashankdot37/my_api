@@ -18,7 +18,7 @@ pub struct Player{
 //used to create a new player object and insert to database
 #[derive(Insertable,Serialize, Deserialize)]
 #[diesel(table_name = players)]
-pub struct NewPlayers{
+pub struct NewPlayer{
     pub pname: String,
     pub jersey_no: i32,
     pub available: bool
@@ -29,16 +29,16 @@ impl Player{
         all_players.find(id).load::<Player>(conn).expect("Error loading player.")
     }
 
-    pub fn all(id:i32, conn: &mut PgConnection)->Vec<Player>{
+    pub fn all(conn: &mut PgConnection)->Vec<Player>{
         all_players.order(players::id.desc()).load::<Player>(conn).expect("Error loading player.")
     }
 
-    pub fn update_by_id(id:i32, conn: &mut PgConnection, player:NewPlayers)->bool{
+    pub fn update_by_id(id:i32, conn: &mut PgConnection, player:NewPlayer)->bool{
         use crate::schema::players::dsl::{pname as p,jersey_no as j, available as a};
-        let NewPlayers{pname, jersey_no, available} = player;
+        let NewPlayer{pname, jersey_no, available} = player;
         diesel::update(all_players.find(id)).set((p.eq(pname), j.eq(jersey_no), a.eq(available))).get_result::<Player>(conn).is_ok()
     }
-    pub fn insert(player:NewPlayers, conn:&mut PgConnection)->bool{
+    pub fn insert(player:NewPlayer, conn:&mut PgConnection)->bool{
         diesel::insert_into(players::table).values(&player).execute(conn).is_ok()
     }
     pub fn delete_by_id(id: i32, conn: &mut PgConnection)->bool{

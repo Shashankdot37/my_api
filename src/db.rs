@@ -1,41 +1,46 @@
 use diesel::pg::PgConnection;
-use diesel::r2d2::{self,ConnectionManager};
+use diesel::r2d2::{Pool, PooledConnection, ConnectionManager};
+use rocket::request::{FromRequest, Outcome};
+use rocket::{Request, State};
 use rocket::http::Status;
-use rocket::request::FromRequest;
-use rocket::outcome::{Outcome, Success, Failure, Forward};
-use rocket::{Request,State};
-use std::ops::Deref;
 use rocket::async_trait;
+use std::ops::{Deref,DerefMut};
 
-pub type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;
+pub type DBPool = Pool<ConnectionManager<PgConnection>>;
 
-pub fn init_pool(database_url:&str) -> Pool{
+pub fn init_pool(database_url : &str) -> DBPool{
     let manager = ConnectionManager::<PgConnection>::new(database_url);
-    r2d2::Pool::builder().build(manager).expect("Failed to create pool")
+    Pool::builder().build(manager).expect("Failed to create a pool.")
 }
 
-pub struct Conn(r2d2::PooledConnection<ConnectionManager<PgConnection>>);
+pub struct Conn(pub PooledConnection<ConnectionManager<PgConnection>>);
 
-#[rocket::async_trait]
+#[async_trait]
 impl<'r> FromRequest<'r> for Conn{
-    type Error=(Status,());
+    type Error = ();
 
-    async fn from_request(request:&'r Request<'_>)->Outcome<Self,Self::Error,()>{
-        let pool = request.guard::<&State<Pool>>().await;
-        match pool{
-            Success(p) => match p.get(){
-                Ok(conn) => Success(Conn(conn)),
-                Err(_)=>Failure((Status::ServiceUnavailable, ())),
+    async fn from_request(request: &'r Request<'_>) -> Outcome<Self,()>{
+        match request.guard::<&State<DBPool>>().await{
+            Outcome::Success(pool) => match pool.get(){
+                Ok(conn) => Outcome::Success(Conn(conn)),
+                Err(_) => Outcome::Error((Status::ServiceUnavailable,()))
             },
-            Failure(err) => Failure(err),
-            Forward(f) => Forward(f),
+            Outcome::Error(_) => Outcome::Error((Status::ServiceUnavailable,())),
+            Outcome::Forward(_) => Outcome::Forward(Status::InternalServerError)
         }
     }
 }
 
 impl Deref for Conn{
     type Target = PgConnection;
+
     fn deref(&self) -> &Self::Target{
         &self.0
+    }
+}
+
+impl DerefMut for Conn {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
