@@ -13,3 +13,4 @@
 # JetBrains IDE files (optional, uncomment if you want to ignore)
 /.idea/
 
+.env
